@@ -201,10 +201,16 @@ genExpR d r ctx (t1 :-> t2)
     else frequency [(3, genAbs d r ctx (t1 :-> t2)),
                     (2, genApp d r ctx (t1 :-> t2))]
 
+defaultR :: Int
+defaultR = 3
+
+defaultD :: Int
+defaultD = 20
+
 genSizedTerm :: Int -> Gen ExpR
 genSizedTerm d 
   = do
-    r <- choose (1, 10)
+    r <- choose (1, defaultR+1)
     t <- genType d r
     e <- genSizedTermWithType t d
     return e
@@ -212,34 +218,34 @@ genSizedTerm d
 genTerm :: Gen ExpR
 genTerm
   = do
-    d <- choose (1, 40)
+    d <- choose (1, defaultD+1)
     e <- genSizedTerm d
     return e
 
 genSizedTermWithType :: Type -> Int -> Gen ExpR
 genSizedTermWithType (ty@(t1 :-> t2)) d 
   = do 
-    r <- choose (1, 10)
+    r <- choose (1, defaultR+1)
     e <- frequency [(1, genExpR d r [] ty), (2, genRec d r [] ty)]
     return e
 genSizedTermWithType (ty@(TNat x)) d
   = do 
-    r <- choose (1, 10)
+    r <- choose (1, defaultR+1)
     e <- frequency [(1, genExpR d r [] ty), (2, genAppedRec d r [] ty)]
     return e
 
 genTermWithType :: Type -> Gen ExpR
 genTermWithType ty
   = do
-    d <- choose (1, 40)
+    d <- choose (1, defaultD+1)
     e <- genSizedTermWithType ty d
     return e
 
 instance Arbitrary Type where
   arbitrary 
     = do
-      d <- choose (1, 40)
-      r <- choose (1, 10)
+      d <- choose (1, defaultD+1)
+      r <- choose (1, defaultR+1)
       genType d r
 
 instance Arbitrary ExpR where
@@ -268,17 +274,20 @@ generatedProgramsTermination
 generatedProgramsTerminationAlternative :: Property
 generatedProgramsTerminationAlternative = forAll (arbitrary :: Gen ExpR) (\e -> isValue (eval e))
 
+defaultFuel :: Int
+defaultFuel = 50
+
 property3 :: Property
 property3 
-  = forAll (genTypeNat 10) 
+  = forAll (genTypeNat defaultR) 
            (\t -> forAll (genTermWithType t)
-                  (\e -> isValue (evalFueled e 500) ==> tsl' (eval e) == L.eval (transform e 20)))
+                  (\e -> isValue (evalFueled e defaultFuel) ==> tsl' (eval e) == L.eval (transform e defaultFuel)))
 
 property4 :: Property
 property4
-  = forAll (genTypeNat 10) 
+  = forAll (genTypeNat defaultR) 
            (\t -> forAll (genTermWithType t)
-                  (\e -> L.isValue (L.eval (transform e 20)) ==> tsl' (eval e) == L.eval (transform e 20)))
+                  (\e -> L.isValue (L.eval (transform e defaultFuel)) ==> tsl' (eval e) == L.eval (transform e defaultFuel)))
 
 testGenerator :: IO ()
 testGenerator 
