@@ -314,7 +314,7 @@ property4
 testGenerator :: IO ()
 testGenerator 
   = do 
-    quickCheckWith stdArgs {maxSuccess = 100000} generatorSound
-    quickCheckWith stdArgs {maxSuccess = 100000} generatedProgramsTermination
-    quickCheckWith stdArgs {maxSuccess = 100000} property3
-    quickCheckWith stdArgs {maxSuccess = 100000} property4
+    quickCheckWith stdArgs {maxSuccess = 1000} generatorSound
+    quickCheckWith stdArgs {maxSuccess = 1000} generatedProgramsTermination
+    quickCheckWith stdArgs {maxSuccess = 1000} property3
+    quickCheckWith stdArgs {maxSuccess = 1000} property4
