@@ -112,18 +112,49 @@ eval1 (Match t1 t2 s t3)
 eval1 (Rec s ty t) = return $ substTopTerm (Rec s ty t) t
 eval1 _ = Nothing
 
+eval1F :: ExpR -> (Maybe ExpR, Bool)
+eval1F (App (Abs s ty t12) v2)
+  | isValue v2 = (return $ substTopTerm v2 t12, False)
+eval1F (App t1 t2)
+  | isValue t1 = (liftM2 App (return t1) (fst $ eval1F t2), snd $ eval1F t2)
+  | otherwise  = (liftM2 App (fst $ eval1F t1) (return t2), snd $ eval1F t1)
+eval1F (Suc t) 
+  | isValue t = (Nothing, False)
+  | otherwise = (liftM Suc (fst $ eval1F t), snd $ eval1F t)
+eval1F (Match t1 t2 s t3)
+  | isValue t1 = case t1 of
+      Zero  -> (return t2, False)
+      Suc t -> (return $ substTopTerm t t3, False)
+  | otherwise   = (liftM4 Match (fst $ eval1F t1) (return t2) (return s) (return t3), snd $ eval1F t1)
+eval1F (Rec s ty t) = (return $ substTopTerm (Rec s ty t) t, True)
+eval1F _ = (Nothing, False)
+
 eval :: ExpR -> ExpR
 eval t =
   case eval1 t of
     Just t' -> eval t'
     Nothing -> t
 
-evalFueled :: ExpR -> Int -> ExpR
-evalFueled t 0 = t
-evalFueled t f =
-  case eval1 t of 
-    Just t' -> evalFueled t' (f-1)
-    Nothing -> t
+evalFueled :: ExpR -> (ExpR, Int)
+evalFueled t =
+  case eval1F t of 
+    (Just t', True)  -> (fst $ evalFueled t', (snd $ evalFueled t') + 1)
+    (Just t', False) -> evalFueled t'
+    (Nothing, _)     -> (t, 0)
+
+defaultLimit :: Int
+defaultLimit = 5000
+
+evalFueledWithAbortion' :: ExpR -> Int -> (ExpR, Int)
+evalFueledWithAbortion' t f = if f >= defaultLimit then (t, f) 
+  else
+    case eval1F t of 
+      (Just t', True)  -> let x = evalFueledWithAbortion' t' (f+1) in (fst x, (snd x) + 1)
+      (Just t', False) -> evalFueledWithAbortion' t' f
+      (Nothing, _)     -> (t, 0)
+
+evalFueledWithAbortion :: ExpR -> (ExpR, Int)
+evalFueledWithAbortion t = evalFueledWithAbortion' t 0
 
 -- Example Expressions --
 exsum :: ExpR
@@ -150,8 +181,8 @@ ex3plus4
                                 (Var "sum" 3) 
                                 (Var "w" 0)) 
                             (Suc (Var "y" 1))))))) 
-            (Suc Zero)) 
-        (Suc (Suc Zero))
+            (Suc (Suc (Suc (Suc Zero))))) 
+        (Suc (Suc (Suc (Suc Zero))))
 
 instance Show Ty where
     show TyNat = "nat"

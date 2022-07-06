@@ -124,6 +124,19 @@ diminishSize (TNat (TSuc x)) = TNat x
 diminishSize (TNat TZero)    = TNat TZero
 diminishSize (t1 :-> t2 )    = (diminishSize t1) :-> (diminishSize t2)
 
+standardize :: ExpR -> String -> Int -> String -> Int -> ExpR
+standardize (App (e1@(Var x1 i1)) e2) recn reci v vi
+  = if x1 == recn && i1 == reci 
+    then App (Var x1 i1) (Var v vi)
+    else App (standardize e1 recn reci v vi) (standardize e2 recn reci v vi)
+standardize (App e1 e2) recn reci v vi 
+  = App (standardize e1 recn reci v vi) (standardize e2 recn reci v vi)
+standardize (Abs v' t e) recn reci v vi
+  = Abs v' t (standardize e recn (reci + 1) v (vi +1))
+standardize (Match e1 e2 v' e3) recn reci v vi
+  = Match (standardize e1 recn reci v vi) (standardize e2 recn reci v vi) v' (standardize e3 recn (reci+1) v (vi+1))
+standardize e _ _ _ _ = e
+
 buildAbsWithMatch :: Int -> Int -> Type -> Context -> Gen ExpR
 buildAbsWithMatch d r (t1 :-> t2) ctx 
   = do 
@@ -138,7 +151,9 @@ buildAbsWithMatch d r (ty@(TNat x)) ctx
           else genZero
     e2 <- genSuc r []
     let v = freshVar ctx
-    e3 <- genExpR (d `div` 2) (r-1) ((v, diminishSize ty) : ctx) ty
+    let ((recn, rect), reci) = last (calcDeBruijn ((v, diminishSize ty) : ctx))
+    e3' <- genExpR (d `div` 2) (r-1) ((v, diminishSize ty) : ctx) ty
+    let e3 = standardize e3' recn reci v 0
     liftM4 Match (return e1) (return e2) (return v) (return e3)
 
 genRec :: Int -> Int -> Context -> Type -> Gen ExpR
@@ -269,30 +284,37 @@ generatedProgramsTermination :: Property
 generatedProgramsTermination
   = forAll (arbitrary :: Gen Type) 
            (\t -> forAll (genTermWithType t)
-                  (\e -> isValue (eval e)))
+                  (\e -> isValue $ fst (evalFueledWithAbortion e)))
 
 generatedProgramsTerminationAlternative :: Property
 generatedProgramsTerminationAlternative = forAll (arbitrary :: Gen ExpR) (\e -> isValue (eval e))
 
 defaultFuel :: Int
-defaultFuel = 50
+defaultFuel = 100
 
+-- If original program terminates with value v using at most f recursive calls
+-- then the transformed program with fuel f also yields v  
 property3 :: Property
 property3 
   = forAll (genTypeNat defaultR) 
            (\t -> forAll (genTermWithType t)
-                  (\e -> isValue (evalFueled e defaultFuel) ==> tsl' (eval e) == L.eval (transform e defaultFuel)))
+                  (\e -> isValue (expEval e) ==> tsl' (eval e) == L.eval (transform e (fuelEval e))))
+  where
+    expEval  = fst . evalFueledWithAbortion
+    fuelEval = snd. evalFueledWithAbortion
 
+-- If the transformed program yields value v, then the original program yields value v
 property4 :: Property
 property4
   = forAll (genTypeNat defaultR) 
            (\t -> forAll (genTermWithType t)
-                  (\e -> L.isValue (L.eval (transform e defaultFuel)) ==> tsl' (eval e) == L.eval (transform e defaultFuel)))
+                  (\e -> let evExp = L.eval (transform e defaultFuel) in 
+                          L.isValue evExp ==> tsl' (eval e) == evExp))
 
 testGenerator :: IO ()
 testGenerator 
   = do 
-    quickCheckWith stdArgs {maxSuccess = 1000} generatorSound
-    quickCheckWith stdArgs {maxSuccess = 1000} generatedProgramsTermination
-    quickCheckWith stdArgs {maxSuccess = 1000} property3
-    quickCheckWith stdArgs {maxSuccess = 1000} property4
+    quickCheckWith stdArgs {maxSuccess = 100000} generatorSound
+    quickCheckWith stdArgs {maxSuccess = 100000} generatedProgramsTermination
+    quickCheckWith stdArgs {maxSuccess = 100000} property3
+    quickCheckWith stdArgs {maxSuccess = 100000} property4
