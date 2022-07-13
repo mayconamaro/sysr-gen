@@ -1,0 +1,312 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>module Gen where
+<span class="lineno">    2 </span>
+<span class="lineno">    3 </span>import Test.QuickCheck
+<span class="lineno">    4 </span>import Control.Monad
+<span class="lineno">    5 </span>import ExpR
+<span class="lineno">    6 </span>import qualified ExpL as L
+<span class="lineno">    7 </span>import SizedType
+<span class="lineno">    8 </span>import Unroll (transform, tsl')
+<span class="lineno">    9 </span>
+<span class="lineno">   10 </span>type Context = [(String, Type)] -- (name, sized type)
+<span class="lineno">   11 </span>
+<span class="lineno">   12 </span>fromIntToNat :: Int -&gt; Nat
+<span class="lineno">   13 </span><span class="decl"><span class="istickedoff">fromIntToNat x</span>
+<span class="lineno">   14 </span><span class="spaces">    </span><span class="istickedoff">| x &gt; 0     = TSuc (fromIntToNat (x-1))</span>
+<span class="lineno">   15 </span><span class="spaces">    </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = TZero</span></span>
+<span class="lineno">   16 </span>
+<span class="lineno">   17 </span>genIndex :: Int -&gt; Gen Nat
+<span class="lineno">   18 </span><span class="decl"><span class="istickedoff">genIndex r</span>
+<span class="lineno">   19 </span><span class="spaces">  </span><span class="istickedoff">= do</span>
+<span class="lineno">   20 </span><span class="spaces">    </span><span class="istickedoff">i &lt;- choose (1, r)</span>
+<span class="lineno">   21 </span><span class="spaces">    </span><span class="istickedoff">return $ fromIntToNat i</span></span>
+<span class="lineno">   22 </span>    
+<span class="lineno">   23 </span>genTypeNat :: Int -&gt; Gen Type
+<span class="lineno">   24 </span><span class="decl"><span class="istickedoff">genTypeNat r = liftM TNat (genIndex r)</span></span> 
+<span class="lineno">   25 </span>
+<span class="lineno">   26 </span>genTypeFun :: Int -&gt; Int -&gt; Gen Type
+<span class="lineno">   27 </span><span class="decl"><span class="istickedoff">genTypeFun 0 r</span>
+<span class="lineno">   28 </span><span class="spaces">  </span><span class="istickedoff">= do</span>
+<span class="lineno">   29 </span><span class="spaces">    </span><span class="istickedoff">n1 &lt;- genTypeNat r</span>
+<span class="lineno">   30 </span><span class="spaces">    </span><span class="istickedoff">n2 &lt;- genTypeNat r</span>
+<span class="lineno">   31 </span><span class="spaces">    </span><span class="istickedoff">liftM2 (:-&gt;) (return n1) (return n2)</span>
+<span class="lineno">   32 </span><span class="spaces"></span><span class="istickedoff">genTypeFun d r</span>
+<span class="lineno">   33 </span><span class="spaces">  </span><span class="istickedoff">= do</span>
+<span class="lineno">   34 </span><span class="spaces">    </span><span class="istickedoff">n1 &lt;- genTypeNat r</span>
+<span class="lineno">   35 </span><span class="spaces">    </span><span class="istickedoff">n2 &lt;- oneof [genTypeNat r, genTypeFun (d `div` 2) r]</span>
+<span class="lineno">   36 </span><span class="spaces">    </span><span class="istickedoff">liftM2 (:-&gt;) (return n1) (return n2)</span></span> 
+<span class="lineno">   37 </span>
+<span class="lineno">   38 </span>genType :: Int -&gt; Int -&gt; Gen Type
+<span class="lineno">   39 </span><span class="decl"><span class="istickedoff">genType d r = oneof [genTypeNat r, genTypeFun d r]</span></span>
+<span class="lineno">   40 </span>
+<span class="lineno">   41 </span>genZero :: Gen ExpR
+<span class="lineno">   42 </span><span class="decl"><span class="istickedoff">genZero = return Zero</span></span>
+<span class="lineno">   43 </span>
+<span class="lineno">   44 </span>calcDeBruijn :: [a] -&gt; [(a, Int)]
+<span class="lineno">   45 </span><span class="decl"><span class="istickedoff">calcDeBruijn xs = let n = (length xs) - 1 in zip xs [0..n]</span></span> 
+<span class="lineno">   46 </span>
+<span class="lineno">   47 </span>candidatesBuilder :: ((a, Int) -&gt; Bool) -&gt; [a] -&gt; [Gen (a, Int)]
+<span class="lineno">   48 </span><span class="decl"><span class="istickedoff">candidatesBuilder f xs = map return $ filter f $ calcDeBruijn xs</span></span>
+<span class="lineno">   49 </span>
+<span class="lineno">   50 </span>varCriteria :: Type -&gt; ((String, Type), Int) -&gt; Bool
+<span class="lineno">   51 </span><span class="decl"><span class="istickedoff">varCriteria ty ((n, t), i) = t &lt;= ty</span></span>
+<span class="lineno">   52 </span>
+<span class="lineno">   53 </span>candidates :: Context -&gt; Type -&gt; [Gen ((String, Type), Int)]
+<span class="lineno">   54 </span><span class="decl"><span class="istickedoff">candidates ctx ty = candidatesBuilder (varCriteria ty) ctx</span></span>
+<span class="lineno">   55 </span>
+<span class="lineno">   56 </span>existCandidates :: Context -&gt; Type -&gt; Bool
+<span class="lineno">   57 </span><span class="decl"><span class="istickedoff">existCandidates ctx ty = not . null $ candidates ctx ty</span></span>
+<span class="lineno">   58 </span>
+<span class="lineno">   59 </span>genVar :: Context -&gt; Type -&gt; Gen ExpR
+<span class="lineno">   60 </span><span class="decl"><span class="istickedoff">genVar ctx ty</span>
+<span class="lineno">   61 </span><span class="spaces">  </span><span class="istickedoff">= do</span>
+<span class="lineno">   62 </span><span class="spaces">    </span><span class="istickedoff">((v, t), i) &lt;- oneof $ candidatesBuilder (varCriteria ty) ctx</span>
+<span class="lineno">   63 </span><span class="spaces">    </span><span class="istickedoff">liftM2 Var (return v) (return i)</span></span>
+<span class="lineno">   64 </span>
+<span class="lineno">   65 </span>genSuc :: Int -&gt; Context -&gt; Gen ExpR
+<span class="lineno">   66 </span><span class="decl"><span class="istickedoff">genSuc 0 _ = genZero</span>
+<span class="lineno">   67 </span><span class="spaces"></span><span class="istickedoff">genSuc r ctx</span>
+<span class="lineno">   68 </span><span class="spaces">  </span><span class="istickedoff">= do</span>
+<span class="lineno">   69 </span><span class="spaces">    </span><span class="istickedoff">let r' = r - 1</span>
+<span class="lineno">   70 </span><span class="spaces">    </span><span class="istickedoff">let ty = TNat (fromIntToNat r')</span>
+<span class="lineno">   71 </span><span class="spaces">    </span><span class="istickedoff">let ls = if existCandidates ctx ty </span>
+<span class="lineno">   72 </span><span class="spaces">             </span><span class="istickedoff">then [(2, genZero), (2, genSuc r' ctx), (1, genVar ctx ty)]</span>
+<span class="lineno">   73 </span><span class="spaces">             </span><span class="istickedoff">else [(2, genZero), (2, genSuc r' ctx)]</span>
+<span class="lineno">   74 </span><span class="spaces">    </span><span class="istickedoff">e &lt;- frequency ls</span>
+<span class="lineno">   75 </span><span class="spaces">    </span><span class="istickedoff">liftM Suc (return e)</span></span>
+<span class="lineno">   76 </span>
+<span class="lineno">   77 </span>nameSupply :: [String]
+<span class="lineno">   78 </span><span class="decl"><span class="istickedoff">nameSupply = [&quot;x&quot; ++ show n | n &lt;- [1..]]</span></span>
+<span class="lineno">   79 </span>
+<span class="lineno">   80 </span>freshVar' :: Context -&gt; [String] -&gt; String
+<span class="lineno">   81 </span><span class="decl"><span class="istickedoff">freshVar' ctx (s : ss)</span>
+<span class="lineno">   82 </span><span class="spaces">  </span><span class="istickedoff">| s `elem` (map fst ctx) = freshVar' ctx ss</span>
+<span class="lineno">   83 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = s</span></span>
+<span class="lineno">   84 </span>
+<span class="lineno">   85 </span>freshVar :: Context -&gt; String
+<span class="lineno">   86 </span><span class="decl"><span class="istickedoff">freshVar = flip freshVar' nameSupply</span></span>
+<span class="lineno">   87 </span>
+<span class="lineno">   88 </span>eraseSizeOnTy :: Type -&gt; Ty
+<span class="lineno">   89 </span><span class="decl"><span class="istickedoff">eraseSizeOnTy (TNat x) = TyNat</span>
+<span class="lineno">   90 </span><span class="spaces"></span><span class="istickedoff">eraseSizeOnTy (t1 :-&gt; t2) = TyFun (eraseSizeOnTy t1) (eraseSizeOnTy t2)</span></span>
+<span class="lineno">   91 </span>
+<span class="lineno">   92 </span>genAbs :: Int -&gt; Int -&gt; Context -&gt; Type -&gt; Gen ExpR
+<span class="lineno">   93 </span><span class="decl"><span class="istickedoff">genAbs d r ctx (t1 :-&gt; t2)</span>
+<span class="lineno">   94 </span><span class="spaces">  </span><span class="istickedoff">= do</span>
+<span class="lineno">   95 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">v    = freshVar ctx</span></span>
+<span class="lineno">   96 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">d'   = d `div` 2</span></span>
+<span class="lineno">   97 </span><span class="spaces">    </span><span class="istickedoff">let ctx' = (<span class="nottickedoff">v</span>, t1) : ctx</span>
+<span class="lineno">   98 </span><span class="spaces">    </span><span class="istickedoff">e &lt;- genExpR d r ctx' t2</span>
+<span class="lineno">   99 </span><span class="spaces">    </span><span class="istickedoff">liftM3 Abs <span class="nottickedoff">(return v)</span> (return (eraseSizeOnTy t1)) (return e)</span></span>
+<span class="lineno">  100 </span>
+<span class="lineno">  101 </span>genApp :: Int -&gt; Int -&gt; Context -&gt; Type -&gt; Gen ExpR
+<span class="lineno">  102 </span><span class="decl"><span class="istickedoff">genApp d r ctx ty</span>
+<span class="lineno">  103 </span><span class="spaces">  </span><span class="istickedoff">= do</span>
+<span class="lineno">  104 </span><span class="spaces">    </span><span class="istickedoff">let d' = d `div` 2</span>
+<span class="lineno">  105 </span><span class="spaces">    </span><span class="istickedoff">t1 &lt;- genType d' r</span>
+<span class="lineno">  106 </span><span class="spaces">    </span><span class="istickedoff">e1 &lt;- genExpR d' r ctx (t1 :-&gt; ty)</span>
+<span class="lineno">  107 </span><span class="spaces">    </span><span class="istickedoff">e2 &lt;- genExpR d' r ctx t1</span>
+<span class="lineno">  108 </span><span class="spaces">    </span><span class="istickedoff">liftM2 App (return e1) (return e2)</span></span>
+<span class="lineno">  109 </span>
+<span class="lineno">  110 </span>genMatch :: Int -&gt; Int -&gt; Context -&gt; Type -&gt; Gen ExpR
+<span class="lineno">  111 </span><span class="decl"><span class="istickedoff">genMatch d r ctx ty</span>
+<span class="lineno">  112 </span><span class="spaces">  </span><span class="istickedoff">= do</span>
+<span class="lineno">  113 </span><span class="spaces">    </span><span class="istickedoff">let d'  = d `div` 2</span>
+<span class="lineno">  114 </span><span class="spaces">    </span><span class="istickedoff">let tn  = TNat (fromIntToNat r)</span>
+<span class="lineno">  115 </span><span class="spaces">    </span><span class="istickedoff">let tn' = TNat (fromIntToNat (r-1))</span>
+<span class="lineno">  116 </span><span class="spaces">    </span><span class="istickedoff">let v   = freshVar ctx</span>
+<span class="lineno">  117 </span><span class="spaces">    </span><span class="istickedoff">e1 &lt;- genExpR d' r ctx tn</span>
+<span class="lineno">  118 </span><span class="spaces">    </span><span class="istickedoff">e2 &lt;- genExpR d' r ctx ty</span>
+<span class="lineno">  119 </span><span class="spaces">    </span><span class="istickedoff">e3 &lt;- genExpR d' r ((v, tn') : ctx) ty</span>
+<span class="lineno">  120 </span><span class="spaces">    </span><span class="istickedoff">liftM4 Match (return e1) (return e2) <span class="nottickedoff">(return v)</span> (return e3)</span></span>
+<span class="lineno">  121 </span>
+<span class="lineno">  122 </span>diminishSize :: Type -&gt; Type
+<span class="lineno">  123 </span><span class="decl"><span class="istickedoff">diminishSize (TNat (TSuc x)) = TNat x</span>
+<span class="lineno">  124 </span><span class="spaces"></span><span class="istickedoff">diminishSize (TNat TZero)    = <span class="nottickedoff">TNat TZero</span></span>
+<span class="lineno">  125 </span><span class="spaces"></span><span class="istickedoff">diminishSize (t1 :-&gt; t2 )    = (diminishSize t1) :-&gt; (diminishSize t2)</span></span>
+<span class="lineno">  126 </span>
+<span class="lineno">  127 </span>buildAbsWithMatch :: Int -&gt; Int -&gt; Type -&gt; Context -&gt; Gen ExpR
+<span class="lineno">  128 </span><span class="decl"><span class="istickedoff">buildAbsWithMatch d r (t1 :-&gt; t2) ctx </span>
+<span class="lineno">  129 </span><span class="spaces">  </span><span class="istickedoff">= do </span>
+<span class="lineno">  130 </span><span class="spaces">    </span><span class="istickedoff">let v = freshVar ctx </span>
+<span class="lineno">  131 </span><span class="spaces">    </span><span class="istickedoff">let t1' = eraseSizeOnTy t1</span>
+<span class="lineno">  132 </span><span class="spaces">    </span><span class="istickedoff">e &lt;- buildAbsWithMatch d r t2 ((v, t1) : ctx)</span>
+<span class="lineno">  133 </span><span class="spaces">    </span><span class="istickedoff">liftM3 Abs <span class="nottickedoff">(return v)</span> (return t1') (return e)</span>
+<span class="lineno">  134 </span><span class="spaces"></span><span class="istickedoff">buildAbsWithMatch d r (ty@(TNat x)) ctx</span>
+<span class="lineno">  135 </span><span class="spaces">  </span><span class="istickedoff">= do</span>
+<span class="lineno">  136 </span><span class="spaces">    </span><span class="istickedoff">e1 &lt;- if existCandidates ctx (diminishSize ty) </span>
+<span class="lineno">  137 </span><span class="spaces">          </span><span class="istickedoff">then oneof [genZero, genVar ctx (diminishSize ty)] </span>
+<span class="lineno">  138 </span><span class="spaces">          </span><span class="istickedoff">else genZero</span>
+<span class="lineno">  139 </span><span class="spaces">    </span><span class="istickedoff">e2 &lt;- genSuc r []</span>
+<span class="lineno">  140 </span><span class="spaces">    </span><span class="istickedoff">let v = freshVar ctx</span>
+<span class="lineno">  141 </span><span class="spaces">    </span><span class="istickedoff">e3 &lt;- genExpR (d `div` 2) (r-1) ((v, diminishSize ty) : ctx) ty</span>
+<span class="lineno">  142 </span><span class="spaces">    </span><span class="istickedoff">liftM4 Match (return e1) (return e2) <span class="nottickedoff">(return v)</span> (return e3)</span></span>
+<span class="lineno">  143 </span>
+<span class="lineno">  144 </span>genRec :: Int -&gt; Int -&gt; Context -&gt; Type -&gt; Gen ExpR
+<span class="lineno">  145 </span><span class="decl"><span class="istickedoff">genRec d r ctx (ty@(t1 :-&gt; t2))</span>
+<span class="lineno">  146 </span><span class="spaces">  </span><span class="istickedoff">= do</span>
+<span class="lineno">  147 </span><span class="spaces">    </span><span class="istickedoff">let v   = freshVar ctx</span>
+<span class="lineno">  148 </span><span class="spaces">    </span><span class="istickedoff">let ty' = diminishSize ty</span>
+<span class="lineno">  149 </span><span class="spaces">    </span><span class="istickedoff">let tn  = eraseSizeOnTy ty</span>
+<span class="lineno">  150 </span><span class="spaces">    </span><span class="istickedoff">e &lt;- buildAbsWithMatch (d `div` 2) r ty ((v, ty') : ctx) </span>
+<span class="lineno">  151 </span><span class="spaces">    </span><span class="istickedoff">liftM3 Rec (return v) (return tn) (return e)</span></span>
+<span class="lineno">  152 </span>
+<span class="lineno">  153 </span>buildApps :: Int -&gt; Int -&gt; Context -&gt; ExpR -&gt; [Type] -&gt; Gen ExpR
+<span class="lineno">  154 </span><span class="decl"><span class="istickedoff">buildApps d r ctx eRec (t : [])</span>
+<span class="lineno">  155 </span><span class="spaces">  </span><span class="istickedoff">= do</span>
+<span class="lineno">  156 </span><span class="spaces">    </span><span class="istickedoff">e &lt;- genExpR d r ctx t</span>
+<span class="lineno">  157 </span><span class="spaces">    </span><span class="istickedoff">liftM2 App (return eRec) (return e)</span>
+<span class="lineno">  158 </span><span class="spaces"></span><span class="istickedoff">buildApps d r ctx eRec (t : ts)</span>
+<span class="lineno">  159 </span><span class="spaces">  </span><span class="istickedoff">= do</span>
+<span class="lineno">  160 </span><span class="spaces">    </span><span class="istickedoff">e2 &lt;- genExpR d r ctx t</span>
+<span class="lineno">  161 </span><span class="spaces">    </span><span class="istickedoff">e1 &lt;- buildApps d r ctx eRec ts</span>
+<span class="lineno">  162 </span><span class="spaces">    </span><span class="istickedoff">liftM2 App (return e1) (return e2)</span></span>  
+<span class="lineno">  163 </span>    
+<span class="lineno">  164 </span>argumentList :: Type -&gt; [Type]
+<span class="lineno">  165 </span><span class="decl"><span class="istickedoff">argumentList (t1 :-&gt; t2) = t1 : (argumentList t2)  </span>
+<span class="lineno">  166 </span><span class="spaces"></span><span class="istickedoff">argumentList  _          = []</span></span>
+<span class="lineno">  167 </span>
+<span class="lineno">  168 </span>revArgumentList :: Type -&gt; [Type]
+<span class="lineno">  169 </span><span class="decl"><span class="istickedoff">revArgumentList = reverse . argumentList</span></span>
+<span class="lineno">  170 </span>
+<span class="lineno">  171 </span>genAppedRec :: Int -&gt; Int -&gt; Context -&gt; Type -&gt; Gen ExpR
+<span class="lineno">  172 </span><span class="decl"><span class="istickedoff">genAppedRec d r ctx (ty@(TNat x))</span>
+<span class="lineno">  173 </span><span class="spaces">  </span><span class="istickedoff">= do</span>
+<span class="lineno">  174 </span><span class="spaces">    </span><span class="istickedoff">ty1 &lt;- genTypeFun d (convert x)</span>
+<span class="lineno">  175 </span><span class="spaces">    </span><span class="istickedoff">e   &lt;- genRec (d `div` 2) r ctx ty1</span>
+<span class="lineno">  176 </span><span class="spaces">    </span><span class="istickedoff">buildApps d r ctx e (revArgumentList ty1)</span></span>
+<span class="lineno">  177 </span>
+<span class="lineno">  178 </span>genExpR :: Int -&gt; Int -&gt; Context -&gt; Type -&gt; Gen ExpR
+<span class="lineno">  179 </span><span class="decl"><span class="istickedoff">genExpR 0 r ctx (TNat x)</span>
+<span class="lineno">  180 </span><span class="spaces">  </span><span class="istickedoff">= genZero</span>
+<span class="lineno">  181 </span><span class="spaces"></span><span class="istickedoff">genExpR 1 r ctx (TNat x)</span>
+<span class="lineno">  182 </span><span class="spaces">  </span><span class="istickedoff">= genSuc (convert x) ctx</span>
+<span class="lineno">  183 </span><span class="spaces"></span><span class="istickedoff">genExpR d r ctx (TNat x)</span>
+<span class="lineno">  184 </span><span class="spaces">  </span><span class="istickedoff">= if existCandidates ctx (TNat x) </span>
+<span class="lineno">  185 </span><span class="spaces">    </span><span class="istickedoff">then frequency [(3, genZero), </span>
+<span class="lineno">  186 </span><span class="spaces">                    </span><span class="istickedoff">(3, genSuc (convert x) ctx), </span>
+<span class="lineno">  187 </span><span class="spaces">                    </span><span class="istickedoff">(2, genVar ctx (TNat x)), </span>
+<span class="lineno">  188 </span><span class="spaces">                    </span><span class="istickedoff">(2, genApp d r ctx (TNat x)),</span>
+<span class="lineno">  189 </span><span class="spaces">                    </span><span class="istickedoff">(1, genMatch d r ctx (TNat x))]</span>
+<span class="lineno">  190 </span><span class="spaces">    </span><span class="istickedoff">else frequency [(3, genZero), </span>
+<span class="lineno">  191 </span><span class="spaces">                    </span><span class="istickedoff">(3, genSuc (convert x) ctx),</span>
+<span class="lineno">  192 </span><span class="spaces">                    </span><span class="istickedoff">(2, genApp d r ctx (TNat x)),</span>
+<span class="lineno">  193 </span><span class="spaces">                    </span><span class="istickedoff">(1, genMatch d r ctx (TNat x))]</span>
+<span class="lineno">  194 </span><span class="spaces"></span><span class="istickedoff">genExpR 0 r ctx (t1 :-&gt; t2)</span>
+<span class="lineno">  195 </span><span class="spaces">  </span><span class="istickedoff">= genAbs 0 <span class="nottickedoff">r</span> <span class="nottickedoff">ctx</span> (t1 :-&gt; t2)</span>
+<span class="lineno">  196 </span><span class="spaces"></span><span class="istickedoff">genExpR d r ctx (t1 :-&gt; t2)</span>
+<span class="lineno">  197 </span><span class="spaces">  </span><span class="istickedoff">= if existCandidates ctx (t1 :-&gt; t2)</span>
+<span class="lineno">  198 </span><span class="spaces">    </span><span class="istickedoff">then frequency [(3, genAbs d r ctx (t1 :-&gt; t2)),</span>
+<span class="lineno">  199 </span><span class="spaces">                    </span><span class="istickedoff">(2, genApp d r ctx (t1 :-&gt; t2)),</span>
+<span class="lineno">  200 </span><span class="spaces">                    </span><span class="istickedoff">(2, genVar ctx (t1 :-&gt; t2))]</span>
+<span class="lineno">  201 </span><span class="spaces">    </span><span class="istickedoff">else frequency [(3, genAbs d r ctx (t1 :-&gt; t2)),</span>
+<span class="lineno">  202 </span><span class="spaces">                    </span><span class="istickedoff">(2, genApp d r ctx (t1 :-&gt; t2))]</span></span>
+<span class="lineno">  203 </span>
+<span class="lineno">  204 </span>genSizedTerm :: Int -&gt; Gen ExpR
+<span class="lineno">  205 </span><span class="decl"><span class="nottickedoff">genSizedTerm d </span>
+<span class="lineno">  206 </span><span class="spaces">  </span><span class="nottickedoff">= do</span>
+<span class="lineno">  207 </span><span class="spaces">    </span><span class="nottickedoff">r &lt;- choose (1, 10)</span>
+<span class="lineno">  208 </span><span class="spaces">    </span><span class="nottickedoff">t &lt;- genType d r</span>
+<span class="lineno">  209 </span><span class="spaces">    </span><span class="nottickedoff">e &lt;- genSizedTermWithType t d</span>
+<span class="lineno">  210 </span><span class="spaces">    </span><span class="nottickedoff">return e</span></span>
+<span class="lineno">  211 </span>
+<span class="lineno">  212 </span>genTerm :: Gen ExpR
+<span class="lineno">  213 </span><span class="decl"><span class="nottickedoff">genTerm</span>
+<span class="lineno">  214 </span><span class="spaces">  </span><span class="nottickedoff">= do</span>
+<span class="lineno">  215 </span><span class="spaces">    </span><span class="nottickedoff">d &lt;- choose (1, 40)</span>
+<span class="lineno">  216 </span><span class="spaces">    </span><span class="nottickedoff">e &lt;- genSizedTerm d</span>
+<span class="lineno">  217 </span><span class="spaces">    </span><span class="nottickedoff">return e</span></span>
+<span class="lineno">  218 </span>
+<span class="lineno">  219 </span>genSizedTermWithType :: Type -&gt; Int -&gt; Gen ExpR
+<span class="lineno">  220 </span><span class="decl"><span class="istickedoff">genSizedTermWithType (ty@(t1 :-&gt; t2)) d </span>
+<span class="lineno">  221 </span><span class="spaces">  </span><span class="istickedoff">= do </span>
+<span class="lineno">  222 </span><span class="spaces">    </span><span class="istickedoff">r &lt;- choose (1, 10)</span>
+<span class="lineno">  223 </span><span class="spaces">    </span><span class="istickedoff">e &lt;- frequency [(1, genExpR d r [] ty), (2, genRec d r [] ty)]</span>
+<span class="lineno">  224 </span><span class="spaces">    </span><span class="istickedoff">return e</span>
+<span class="lineno">  225 </span><span class="spaces"></span><span class="istickedoff">genSizedTermWithType (ty@(TNat x)) d</span>
+<span class="lineno">  226 </span><span class="spaces">  </span><span class="istickedoff">= do </span>
+<span class="lineno">  227 </span><span class="spaces">    </span><span class="istickedoff">r &lt;- choose (1, 10)</span>
+<span class="lineno">  228 </span><span class="spaces">    </span><span class="istickedoff">e &lt;- frequency [(1, genExpR d r [] ty), (2, genAppedRec d r [] ty)]</span>
+<span class="lineno">  229 </span><span class="spaces">    </span><span class="istickedoff">return e</span></span>
+<span class="lineno">  230 </span>
+<span class="lineno">  231 </span>genTermWithType :: Type -&gt; Gen ExpR
+<span class="lineno">  232 </span><span class="decl"><span class="istickedoff">genTermWithType ty</span>
+<span class="lineno">  233 </span><span class="spaces">  </span><span class="istickedoff">= do</span>
+<span class="lineno">  234 </span><span class="spaces">    </span><span class="istickedoff">d &lt;- choose (1, 40)</span>
+<span class="lineno">  235 </span><span class="spaces">    </span><span class="istickedoff">e &lt;- genSizedTermWithType ty d</span>
+<span class="lineno">  236 </span><span class="spaces">    </span><span class="istickedoff">return e</span></span>
+<span class="lineno">  237 </span>
+<span class="lineno">  238 </span>instance Arbitrary Type where
+<span class="lineno">  239 </span>  <span class="decl"><span class="istickedoff">arbitrary </span>
+<span class="lineno">  240 </span><span class="spaces">    </span><span class="istickedoff">= do</span>
+<span class="lineno">  241 </span><span class="spaces">      </span><span class="istickedoff">d &lt;- choose (1, 40)</span>
+<span class="lineno">  242 </span><span class="spaces">      </span><span class="istickedoff">r &lt;- choose (1, 10)</span>
+<span class="lineno">  243 </span><span class="spaces">      </span><span class="istickedoff">genType d r</span></span>
+<span class="lineno">  244 </span>
+<span class="lineno">  245 </span>instance Arbitrary ExpR where
+<span class="lineno">  246 </span>  <span class="decl"><span class="nottickedoff">arbitrary = genTerm</span></span>
+<span class="lineno">  247 </span>
+<span class="lineno">  248 </span>isWellTyped :: ExpR -&gt; Bool
+<span class="lineno">  249 </span><span class="decl"><span class="istickedoff">isWellTyped e = case typecheck e of </span>
+<span class="lineno">  250 </span><span class="spaces">                  </span><span class="istickedoff">OK _        -&gt; True</span>
+<span class="lineno">  251 </span><span class="spaces">                  </span><span class="istickedoff">TypeError s -&gt; <span class="nottickedoff">False</span></span></span> 
+<span class="lineno">  252 </span>
+<span class="lineno">  253 </span>generatorSound :: Property
+<span class="lineno">  254 </span><span class="decl"><span class="istickedoff">generatorSound </span>
+<span class="lineno">  255 </span><span class="spaces">  </span><span class="istickedoff">= forAll (arbitrary :: Gen Type) </span>
+<span class="lineno">  256 </span><span class="spaces">           </span><span class="istickedoff">(\t -&gt; forAll (genTermWithType t)</span>
+<span class="lineno">  257 </span><span class="spaces">                  </span><span class="istickedoff">(\e -&gt; isWellTyped e))</span></span>
+<span class="lineno">  258 </span>
+<span class="lineno">  259 </span>generatorSoundAlternative :: Property
+<span class="lineno">  260 </span><span class="decl"><span class="nottickedoff">generatorSoundAlternative = forAll (arbitrary :: Gen ExpR) (\e -&gt; isWellTyped e)</span></span>
+<span class="lineno">  261 </span>
+<span class="lineno">  262 </span>generatedProgramsTermination :: Property
+<span class="lineno">  263 </span><span class="decl"><span class="istickedoff">generatedProgramsTermination</span>
+<span class="lineno">  264 </span><span class="spaces">  </span><span class="istickedoff">= forAll (arbitrary :: Gen Type) </span>
+<span class="lineno">  265 </span><span class="spaces">           </span><span class="istickedoff">(\t -&gt; forAll (genTermWithType t)</span>
+<span class="lineno">  266 </span><span class="spaces">                  </span><span class="istickedoff">(\e -&gt; isValue (eval e)))</span></span>
+<span class="lineno">  267 </span>
+<span class="lineno">  268 </span>generatedProgramsTerminationAlternative :: Property
+<span class="lineno">  269 </span><span class="decl"><span class="nottickedoff">generatedProgramsTerminationAlternative = forAll (arbitrary :: Gen ExpR) (\e -&gt; isValue (eval e))</span></span>
+<span class="lineno">  270 </span>
+<span class="lineno">  271 </span>property3 :: Property
+<span class="lineno">  272 </span><span class="decl"><span class="istickedoff">property3 </span>
+<span class="lineno">  273 </span><span class="spaces">  </span><span class="istickedoff">= forAll (genTypeNat 10) </span>
+<span class="lineno">  274 </span><span class="spaces">           </span><span class="istickedoff">(\t -&gt; forAll (genTermWithType t)</span>
+<span class="lineno">  275 </span><span class="spaces">                  </span><span class="istickedoff">(\e -&gt; isValue (evalFueled e 500) ==&gt; tsl' (eval e) == L.eval (transform e 20)))</span></span>
+<span class="lineno">  276 </span>
+<span class="lineno">  277 </span>property4 :: Property
+<span class="lineno">  278 </span><span class="decl"><span class="istickedoff">property4</span>
+<span class="lineno">  279 </span><span class="spaces">  </span><span class="istickedoff">= forAll (genTypeNat 10) </span>
+<span class="lineno">  280 </span><span class="spaces">           </span><span class="istickedoff">(\t -&gt; forAll (genTermWithType t)</span>
+<span class="lineno">  281 </span><span class="spaces">                  </span><span class="istickedoff">(\e -&gt; L.isValue (L.eval (transform e 20)) ==&gt; tsl' (eval e) == L.eval (transform e 20)))</span></span>
+<span class="lineno">  282 </span>
+<span class="lineno">  283 </span>testGenerator :: IO ()
+<span class="lineno">  284 </span><span class="decl"><span class="istickedoff">testGenerator </span>
+<span class="lineno">  285 </span><span class="spaces">  </span><span class="istickedoff">= do </span>
+<span class="lineno">  286 </span><span class="spaces">    </span><span class="istickedoff">quickCheckWith stdArgs {maxSuccess = 1000} generatorSound</span>
+<span class="lineno">  287 </span><span class="spaces">    </span><span class="istickedoff">quickCheckWith stdArgs {maxSuccess = 1000} generatedProgramsTermination</span>
+<span class="lineno">  288 </span><span class="spaces">    </span><span class="istickedoff">quickCheckWith stdArgs {maxSuccess = 1000} property3</span>
+<span class="lineno">  289 </span><span class="spaces">    </span><span class="istickedoff">quickCheckWith stdArgs {maxSuccess = 1000} property4</span></span>
+
+</pre>
+</body>
+</html>

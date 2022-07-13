@@ -27,9 +27,7 @@ library
   exposed-modules:
       ExpL
       ExpR
-      Gen
       Lib
-      SizedType
       Unroll
   other-modules:
       Paths_sysr_gen
@@ -57,6 +55,8 @@ test-suite sysr-gen-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Gen
+      SizedType
       Paths_sysr_gen
   hs-source-dirs:
       test

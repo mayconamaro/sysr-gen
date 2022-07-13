@@ -1,0 +1,103 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>module ExpL where
+<span class="lineno">    2 </span>
+<span class="lineno">    3 </span>import Control.Monad
+<span class="lineno">    4 </span>
+<span class="lineno">    5 </span>import ExpR (Ty(TyNat, TyFun))
+<span class="lineno">    6 </span>
+<span class="lineno">    7 </span>data ExpL = Zero
+<span class="lineno">    8 </span>          | Error
+<span class="lineno">    9 </span>          | Var String Int
+<span class="lineno">   10 </span>          | Suc ExpL
+<span class="lineno">   11 </span>          | Abs String Ty ExpL
+<span class="lineno">   12 </span>          | App ExpL ExpL
+<span class="lineno">   13 </span>          | Match ExpL ExpL String ExpL
+<span class="lineno">   14 </span>          deriving (<span class="decl"><span class="istickedoff">Eq</span></span>, <span class="decl"><span class="nottickedoff">Show</span></span>)
+<span class="lineno">   15 </span>
+<span class="lineno">   16 </span>-- Substitution  --
+<span class="lineno">   17 </span>
+<span class="lineno">   18 </span>shiftTerm :: Int -&gt; ExpL -&gt; ExpL
+<span class="lineno">   19 </span><span class="decl"><span class="istickedoff">shiftTerm d = walk 0</span>
+<span class="lineno">   20 </span><span class="spaces">  </span><span class="istickedoff">where walk c (Var v x)</span>
+<span class="lineno">   21 </span><span class="spaces">          </span><span class="istickedoff">| <span class="tickonlyfalse">x &gt;= c</span>                = <span class="nottickedoff">Var v (x+d)</span></span>
+<span class="lineno">   22 </span><span class="spaces">          </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span>             = Var <span class="nottickedoff">v</span> x</span>
+<span class="lineno">   23 </span><span class="spaces">        </span><span class="istickedoff">walk c (Abs v ty t1)      = Abs <span class="nottickedoff">v</span> <span class="nottickedoff">ty</span> (walk (c+1) t1)</span>
+<span class="lineno">   24 </span><span class="spaces">        </span><span class="istickedoff">walk c (App t1 t2)        = App (walk c t1) (walk c t2) </span>
+<span class="lineno">   25 </span><span class="spaces">        </span><span class="istickedoff">walk c (Zero)             = Zero</span>
+<span class="lineno">   26 </span><span class="spaces">        </span><span class="istickedoff">walk c (Error)            = <span class="nottickedoff">Error</span></span>
+<span class="lineno">   27 </span><span class="spaces">        </span><span class="istickedoff">walk c (Suc t)            = Suc (walk c t)</span>
+<span class="lineno">   28 </span><span class="spaces">        </span><span class="istickedoff">walk c (Match t1 t2 v t3) = Match (walk c t1) (walk c t2) <span class="nottickedoff">v</span> (walk (c+1) t3)</span></span>
+<span class="lineno">   29 </span>
+<span class="lineno">   30 </span>substTerm :: Int -&gt; ExpL -&gt; ExpL -&gt; ExpL
+<span class="lineno">   31 </span><span class="decl"><span class="istickedoff">substTerm j s = walk 0</span>
+<span class="lineno">   32 </span><span class="spaces">  </span><span class="istickedoff">where walk c (Var v x)</span>
+<span class="lineno">   33 </span><span class="spaces">          </span><span class="istickedoff">| x == j+c              = s</span>
+<span class="lineno">   34 </span><span class="spaces">          </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span>             = Var <span class="nottickedoff">v</span> x</span>
+<span class="lineno">   35 </span><span class="spaces">        </span><span class="istickedoff">walk c (Abs v ty t1)      = Abs <span class="nottickedoff">v</span> <span class="nottickedoff">ty</span> (walk (c+1) t1)</span>
+<span class="lineno">   36 </span><span class="spaces">        </span><span class="istickedoff">walk c (App t1 t2)        = App (walk c t1) (walk c t2)</span>
+<span class="lineno">   37 </span><span class="spaces">        </span><span class="istickedoff">walk c (Zero)             = Zero</span>
+<span class="lineno">   38 </span><span class="spaces">        </span><span class="istickedoff">walk c (Suc t)            = Suc (walk c t)</span>
+<span class="lineno">   39 </span><span class="spaces">        </span><span class="istickedoff">walk c (Match t1 t2 v t3) = Match (walk c t1) (walk c t2) <span class="nottickedoff">v</span> (walk (c+1) t3)</span>
+<span class="lineno">   40 </span><span class="spaces">        </span><span class="istickedoff">walk c (Error)            = <span class="nottickedoff">Error</span></span></span>
+<span class="lineno">   41 </span>
+<span class="lineno">   42 </span>substTopTerm :: ExpL -&gt; ExpL -&gt; ExpL
+<span class="lineno">   43 </span><span class="decl"><span class="istickedoff">substTopTerm s t = shiftTerm <span class="nottickedoff">(-1)</span> (substTerm 0 (shiftTerm <span class="nottickedoff">1</span> s) t)</span></span>
+<span class="lineno">   44 </span>
+<span class="lineno">   45 </span>-- Evaluation --
+<span class="lineno">   46 </span>
+<span class="lineno">   47 </span>isValue :: ExpL -&gt; Bool
+<span class="lineno">   48 </span><span class="decl"><span class="istickedoff">isValue (Abs _ _ _) = True</span>
+<span class="lineno">   49 </span><span class="spaces"></span><span class="istickedoff">isValue (Zero)  = True</span>
+<span class="lineno">   50 </span><span class="spaces"></span><span class="istickedoff">isValue (Suc t) = isValue t</span>
+<span class="lineno">   51 </span><span class="spaces"></span><span class="istickedoff">isValue _       = False</span></span>
+<span class="lineno">   52 </span>
+<span class="lineno">   53 </span>isError :: ExpL -&gt; Bool
+<span class="lineno">   54 </span><span class="decl"><span class="istickedoff">isError = (==) Error</span></span>
+<span class="lineno">   55 </span>
+<span class="lineno">   56 </span>eval1 :: ExpL -&gt; Maybe ExpL
+<span class="lineno">   57 </span><span class="decl"><span class="istickedoff">eval1 (App (Abs s ty t12) v2)</span>
+<span class="lineno">   58 </span><span class="spaces">  </span><span class="istickedoff">| isValue v2 = return $ substTopTerm v2 t12</span>
+<span class="lineno">   59 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlyfalse">isError v2</span> = <span class="nottickedoff">return Error</span></span>
+<span class="lineno">   60 </span><span class="spaces"></span><span class="istickedoff">eval1 (App t1 t2)</span>
+<span class="lineno">   61 </span><span class="spaces">  </span><span class="istickedoff">| isValue t1 = liftM2 App (return t1) (eval1 t2)</span>
+<span class="lineno">   62 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlyfalse">isError t1</span> = <span class="nottickedoff">return Error</span></span>
+<span class="lineno">   63 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span>  = liftM2 App (eval1  t1) (return t2)</span>
+<span class="lineno">   64 </span><span class="spaces"></span><span class="istickedoff">eval1 (Suc t) </span>
+<span class="lineno">   65 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">isValue t</span> = Nothing</span>
+<span class="lineno">   66 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">isError t</span> = <span class="nottickedoff">return Error</span></span>
+<span class="lineno">   67 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> = <span class="nottickedoff">liftM Suc (eval1 t)</span></span>
+<span class="lineno">   68 </span><span class="spaces"></span><span class="istickedoff">eval1 (Match t1 t2 s t3)</span>
+<span class="lineno">   69 </span><span class="spaces">  </span><span class="istickedoff">| isValue t1 = case t1 of</span>
+<span class="lineno">   70 </span><span class="spaces">      </span><span class="istickedoff">Zero  -&gt; return t2</span>
+<span class="lineno">   71 </span><span class="spaces">      </span><span class="istickedoff">Suc t -&gt; return $ substTopTerm t t3</span>
+<span class="lineno">   72 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlyfalse">isError t1</span> = <span class="nottickedoff">return Error</span></span>
+<span class="lineno">   73 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span>   = liftM4 Match (eval1 t1) (return t2) (return <span class="nottickedoff">s</span>) (return t3)</span>
+<span class="lineno">   74 </span><span class="spaces"></span><span class="istickedoff">eval1 _ = Nothing</span></span>
+<span class="lineno">   75 </span>
+<span class="lineno">   76 </span>eval :: ExpL -&gt; ExpL
+<span class="lineno">   77 </span><span class="decl"><span class="istickedoff">eval t =</span>
+<span class="lineno">   78 </span><span class="spaces">  </span><span class="istickedoff">case eval1 t of</span>
+<span class="lineno">   79 </span><span class="spaces">    </span><span class="istickedoff">Just t' -&gt; eval t'</span>
+<span class="lineno">   80 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; t</span></span>
+
+</pre>
+</body>
+</html>

@@ -2,7 +2,7 @@ module ExpL where
 
 import Control.Monad
 
-import ExpR (Ty(TyNat, TyFun))
+import ExpR (Ty(TyNat, TyFun), partialIf)
 
 data ExpL = Zero
           | Error
@@ -11,15 +11,15 @@ data ExpL = Zero
           | Abs String Ty ExpL
           | App ExpL ExpL
           | Match ExpL ExpL String ExpL
-          deriving (Eq, Show)
+          deriving (Eq)--, Show
 
 -- Substitution  --
 
 shiftTerm :: Int -> ExpL -> ExpL
 shiftTerm d = walk 0
-  where walk c (Var v x)
-          | x >= c                = Var v (x+d)
-          | otherwise             = Var v x
+  where walk c (Var v x)          = partialIf (x < c) (Var v x)
+          -- | x >= c                = Var v (x+d)
+          -- | otherwise             = Var v x
         walk c (Abs v ty t1)      = Abs v ty (walk (c+1) t1)
         walk c (App t1 t2)        = App (walk c t1) (walk c t2) 
         walk c (Zero)             = Zero

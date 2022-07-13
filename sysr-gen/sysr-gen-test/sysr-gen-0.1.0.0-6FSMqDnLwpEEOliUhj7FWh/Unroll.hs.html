@@ -1,0 +1,68 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>module Unroll where
+<span class="lineno">    2 </span>
+<span class="lineno">    3 </span>import ExpR
+<span class="lineno">    4 </span>import qualified ExpL as L 
+<span class="lineno">    5 </span>
+<span class="lineno">    6 </span>inl :: ExpR -&gt; String -&gt; ExpR -&gt; ExpR
+<span class="lineno">    7 </span><span class="decl"><span class="istickedoff">inl (Var v' i)          v e = if v == v' then e else (Var v' i)</span>
+<span class="lineno">    8 </span><span class="spaces"></span><span class="istickedoff">inl (Zero)              v e = Zero</span>
+<span class="lineno">    9 </span><span class="spaces"></span><span class="istickedoff">inl (Suc e')            v e = Suc (inl e' v <span class="nottickedoff">e</span>)</span>
+<span class="lineno">   10 </span><span class="spaces"></span><span class="istickedoff">inl (Abs v' t e')       v e = Abs <span class="nottickedoff">v'</span> <span class="nottickedoff">t</span> (inl e' v e)</span>
+<span class="lineno">   11 </span><span class="spaces"></span><span class="istickedoff">inl (App e1 e2)         v e = App (inl e1 v e) (inl e2 v <span class="nottickedoff">e</span>)</span>
+<span class="lineno">   12 </span><span class="spaces"></span><span class="istickedoff">inl (Match e1 e2 v' e3) v e = Match (inl e1 v <span class="nottickedoff">e</span>) (inl e2 <span class="nottickedoff">v</span> <span class="nottickedoff">e</span>) <span class="nottickedoff">v'</span> (inl e3 v e)</span></span>
+<span class="lineno">   13 </span>
+<span class="lineno">   14 </span>exp' :: ExpR -&gt; String -&gt; ExpR -&gt; Int -&gt; ExpR
+<span class="lineno">   15 </span><span class="decl"><span class="istickedoff">exp' e' _ _ 0 = e'</span>
+<span class="lineno">   16 </span><span class="spaces"></span><span class="istickedoff">exp' e' v e n = inl (exp' e' v e (n-1)) v e</span></span>
+<span class="lineno">   17 </span>
+<span class="lineno">   18 </span>expn :: ExpR -&gt; Int -&gt; ExpR
+<span class="lineno">   19 </span><span class="decl"><span class="istickedoff">expn (Rec v t e) n = Rec v <span class="nottickedoff">t</span> (exp' e v e n)</span>
+<span class="lineno">   20 </span><span class="spaces"></span><span class="istickedoff">expn (App e1 e2) n = App (expn e1 n) e2</span>
+<span class="lineno">   21 </span><span class="spaces"></span><span class="istickedoff">expn e           _ = e</span></span>
+<span class="lineno">   22 </span>
+<span class="lineno">   23 </span>elim :: ExpR -&gt; String -&gt; L.ExpL
+<span class="lineno">   24 </span><span class="decl"><span class="istickedoff">elim (Var v' i)          v = if <span class="tickonlyfalse">v == v'</span> then <span class="nottickedoff">L.Error</span> else L.Var <span class="nottickedoff">v'</span> i</span>
+<span class="lineno">   25 </span><span class="spaces"></span><span class="istickedoff">elim (Zero)              v = L.Zero</span>
+<span class="lineno">   26 </span><span class="spaces"></span><span class="istickedoff">elim (Suc e)             v = L.Suc (elim e v)</span>
+<span class="lineno">   27 </span><span class="spaces"></span><span class="istickedoff">elim (Abs v' t e)        v = L.Abs <span class="nottickedoff">v'</span> <span class="nottickedoff">t</span> (elim e v)</span>
+<span class="lineno">   28 </span><span class="spaces"></span><span class="istickedoff">elim (App e1 e2)         v = L.App (elim e1 v) (elim e2 v)</span>
+<span class="lineno">   29 </span><span class="spaces"></span><span class="istickedoff">elim (Match e1 e2 v' e3) v = L.Match (elim e1 v) (elim e2 <span class="nottickedoff">v</span>) <span class="nottickedoff">v'</span> (elim e3 v)</span></span>
+<span class="lineno">   30 </span>
+<span class="lineno">   31 </span>tsl' :: ExpR -&gt; L.ExpL
+<span class="lineno">   32 </span><span class="decl"><span class="istickedoff">tsl' (Var v' i)          = L.Var <span class="nottickedoff">v'</span> i</span>
+<span class="lineno">   33 </span><span class="spaces"></span><span class="istickedoff">tsl' (Zero)              = L.Zero</span>
+<span class="lineno">   34 </span><span class="spaces"></span><span class="istickedoff">tsl' (Suc e)             = L.Suc (tsl' e)</span>
+<span class="lineno">   35 </span><span class="spaces"></span><span class="istickedoff">tsl' (Abs v' t e)        = L.Abs <span class="nottickedoff">v'</span> <span class="nottickedoff">t</span> (tsl' e)</span>
+<span class="lineno">   36 </span><span class="spaces"></span><span class="istickedoff">tsl' (App e1 e2)         = L.App (tsl' e1) (tsl' e2)</span>
+<span class="lineno">   37 </span><span class="spaces"></span><span class="istickedoff">tsl' (Match e1 e2 v' e3) = L.Match (tsl' e1) (tsl' e2) <span class="nottickedoff">v'</span> (tsl' e3)</span></span>
+<span class="lineno">   38 </span>
+<span class="lineno">   39 </span>tsl :: ExpR -&gt; L.ExpL
+<span class="lineno">   40 </span><span class="decl"><span class="istickedoff">tsl (Rec v t e) = elim e v</span>
+<span class="lineno">   41 </span><span class="spaces"></span><span class="istickedoff">tsl (App e1 e2) = L.App (tsl e1) (tsl' e2)</span>
+<span class="lineno">   42 </span><span class="spaces"></span><span class="istickedoff">tsl e           = tsl' e</span></span>
+<span class="lineno">   43 </span>
+<span class="lineno">   44 </span>transform :: ExpR -&gt; Int -&gt; L.ExpL
+<span class="lineno">   45 </span><span class="decl"><span class="istickedoff">transform e f = tsl (expn e f)</span></span>
+
+</pre>
+</body>
+</html>

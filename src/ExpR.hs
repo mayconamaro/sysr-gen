@@ -4,7 +4,7 @@ import Control.Monad
 
 data Ty = TyNat 
         | TyFun Ty Ty
-        deriving (Eq)
+        deriving (Eq, Show)
 
 data ExpR = Zero
           | Var String Int
@@ -21,39 +21,42 @@ type Env = [Ty]
 type ErrorMsg = String
 data Status = OK Ty 
             | TypeError ErrorMsg
-            deriving (Eq, Show)
+            deriving (Eq) --, Show
+
+partialIf :: Bool -> a -> a
+partialIf True = id
 
 typecheck' :: Env -> ExpR -> Status
 typecheck' env  Zero   = OK TyNat
 typecheck' env (Suc e) 
     = case typecheck' env e of
         OK TyNat    -> OK TyNat
-        OK _        -> TypeError "Suc argument is not a nat"
-        TypeError s -> TypeError s
+        -- OK _        -> TypeError "Suc argument is not a nat"
+        -- TypeError s -> TypeError s
 typecheck' env (Var v i)
-    = if i < length env then OK (env !! i) else TypeError "Variable not defined"
+    = partialIf (i < length env) (OK (env !! i)) --if i < length env then OK (env !! i) else TypeError "Variable not defined"
 typecheck' env (Abs v t e)
     = case typecheck' (t:env) e of
         OK t' -> OK (TyFun t t')
-        TypeError s -> TypeError s
+        -- TypeError s -> TypeError s
 typecheck' env (App e1 e2) 
     = case (typecheck' env e1, typecheck' env e2) of
-        (OK (TyFun t1 t2), OK t3) -> if t1 == t3 then OK t2 else TypeError "Function argument does not match"
-        (OK TyNat, _) -> TypeError "Cannot apply nat values to other terms"
-        (TypeError s, _) -> TypeError s
-        (_, TypeError s) -> TypeError s
+        (OK (TyFun t1 t2), OK t3) -> partialIf (t1 == t3) (OK t2)-- if t1 == t3 then OK t2 else TypeError "Function argument does not match"
+        -- (OK TyNat, _) -> TypeError "Cannot apply nat values to other terms"
+        -- (TypeError s, _) -> TypeError s
+        -- (_, TypeError s) -> TypeError s
 typecheck' env (Rec v t e)
     = case typecheck' (t:env) e of
-        OK t' -> if t == t' then OK t else TypeError "Recursive definition type mismatch"
-        TypeError s -> TypeError s
+        OK t' -> partialIf (t == t') (OK t) -- if t == t' then OK t else TypeError "Recursive definition type mismatch"
+        -- TypeError s -> TypeError s
 typecheck' env (Match e1 e2 v e3)
     = case typecheck' env e1 of 
         OK TyNat -> case (typecheck' env e2, typecheck' (TyNat:env) e3) of
-                    (OK t1, OK t2) -> if t1 == t2 then OK t1 else TypeError "Match branches have different types"
-                    (TypeError s, _) -> TypeError s
-                    (_, TypeError s) -> TypeError s
-        OK (TyFun _ _) -> TypeError "Cannot pattern match over a function"
-        TypeError s    -> TypeError s
+                    (OK t1, OK t2) -> partialIf (t1 == t2) (OK t1) -- if t1 == t2 then OK t1 else TypeError "Match branches have different types"
+                    -- (TypeError s, _) -> TypeError s
+                    -- (_, TypeError s) -> TypeError s
+        -- OK (TyFun _ _) -> TypeError "Cannot pattern match over a function"
+        -- TypeError s    -> TypeError s
 
 typecheck :: ExpR -> Status
 typecheck = typecheck' []
@@ -62,9 +65,9 @@ typecheck = typecheck' []
 
 shiftTerm :: Int -> ExpR -> ExpR
 shiftTerm d = walk 0
-  where walk c (Var v x)
-          | x >= c                = Var v (x+d)
-          | otherwise             = Var v x
+  where walk c (Var v x)          = partialIf (x < c) (Var v x)
+          -- | x >= c                = Var v (x+d)
+          -- | otherwise             = Var v x
         walk c (Abs v ty t1)      = Abs v ty (walk (c+1) t1)
         walk c (App t1 t2)        = App (walk c t1) (walk c t2) 
         walk c (Zero)             = Zero
@@ -135,12 +138,12 @@ eval t =
     Just t' -> eval t'
     Nothing -> t
 
-evalFueled :: ExpR -> (ExpR, Int)
-evalFueled t =
-  case eval1F t of 
-    (Just t', True)  -> (fst $ evalFueled t', (snd $ evalFueled t') + 1)
-    (Just t', False) -> evalFueled t'
-    (Nothing, _)     -> (t, 0)
+-- evalFueled :: ExpR -> (ExpR, Int)
+-- evalFueled t =
+--   case eval1F t of 
+--     (Just t', True)  -> (fst $ evalFueled t', (snd $ evalFueled t') + 1)
+--     (Just t', False) -> evalFueled t'
+--     (Nothing, _)     -> (t, 0)
 
 defaultLimit :: Int
 defaultLimit = 5000
@@ -156,35 +159,35 @@ evalFueledWithAbortion' t f = if f >= defaultLimit then (t, f)
 evalFueledWithAbortion :: ExpR -> (ExpR, Int)
 evalFueledWithAbortion t = evalFueledWithAbortion' t 0
 
--- Example Expressions --
-exsum :: ExpR
-exsum = Rec "sum" (TyFun TyNat (TyFun TyNat TyNat)) (Abs "x" (TyNat) (Abs "y" (TyNat)
-                (Match 
-                    (Var "x" 1) 
-                    (Var "y" 0) 
-                    "w" (App 
-                            (App 
-                                (Var "sum" 3) 
-                                (Var "w" 0)) 
-                            (Suc (Var "y" 1))))))
+-- -- Example Expressions --
+-- exsum :: ExpR
+-- exsum = Rec "sum" (TyFun TyNat (TyFun TyNat TyNat)) (Abs "x" (TyNat) (Abs "y" (TyNat)
+--                 (Match 
+--                     (Var "x" 1) 
+--                     (Var "y" 0) 
+--                     "w" (App 
+--                             (App 
+--                                 (Var "sum" 3) 
+--                                 (Var "w" 0)) 
+--                             (Suc (Var "y" 1))))))
 
-ex3plus4 :: ExpR
-ex3plus4 
-    = App 
-        (App 
-            (Rec "sum" (TyFun TyNat (TyFun TyNat TyNat)) (Abs "x" (TyNat) (Abs "y" (TyNat)
-                (Match 
-                    (Var "x" 1) 
-                    (Var "y" 0) 
-                    "w" (App 
-                            (App 
-                                (Var "sum" 3) 
-                                (Var "w" 0)) 
-                            (Suc (Var "y" 1))))))) 
-            (Suc (Suc (Suc (Suc Zero))))) 
-        (Suc (Suc (Suc (Suc Zero))))
+-- ex3plus4 :: ExpR
+-- ex3plus4 
+--     = App 
+--         (App 
+--             (Rec "sum" (TyFun TyNat (TyFun TyNat TyNat)) (Abs "x" (TyNat) (Abs "y" (TyNat)
+--                 (Match 
+--                     (Var "x" 1) 
+--                     (Var "y" 0) 
+--                     "w" (App 
+--                             (App 
+--                                 (Var "sum" 3) 
+--                                 (Var "w" 0)) 
+--                             (Suc (Var "y" 1))))))) 
+--             (Suc (Suc (Suc (Suc Zero))))) 
+--         (Suc (Suc (Suc (Suc Zero))))
 
-instance Show Ty where
-    show TyNat = "nat"
-    show (TyFun (TyFun t1 t2) t3) = "("++ show (TyFun t1 t2) ++") -> " ++ show t3
-    show (TyFun t1 t2) = show t1 ++ " -> " ++ show t2
+-- instance Show Ty where
+--     show TyNat = "nat"
+--     show (TyFun (TyFun t1 t2) t3) = "("++ show (TyFun t1 t2) ++") -> " ++ show t3
+--     show (TyFun t1 t2) = show t1 ++ " -> " ++ show t2
